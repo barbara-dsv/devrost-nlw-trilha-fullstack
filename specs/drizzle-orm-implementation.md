@@ -31,6 +31,7 @@ export const codeSnippets = pgTable("code_snippets", {
   code: text("code").notNull(),
   language: varchar("language", { length: 50 }).notNull(), // "javascript", "typescript", etc.
   score: decimal("score", { precision: 3, scale: 1 }).notNull(), // 0.0 a 10.0
+  scoreCategory: scoreCategoryEnum("score_category").notNull(), // Categoria visual do score
   roastMode: boolean("roast_mode").notNull().default(false),
   roastText: text("roast_text").notNull(), // Análise gerada pela IA
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -67,9 +68,18 @@ export const severityEnum = pgEnum("severity", [
   "good",      // Verde - Pontos positivos
 ]);
 
+export const scoreCategoryEnum = pgEnum("score_category", [
+  "terrible",  // Vermelho (0.0 - 3.0) - Score muito baixo
+  "poor",      // Vermelho/Ambar (3.1 - 5.0) - Score baixo
+  "fair",      // Ambar (5.1 - 7.0) - Score médio
+  "good",      // Ambar/Verde (7.1 - 8.5) - Score bom
+  "excellent", // Verde (8.6 - 10.0) - Score excelente
+]);
+
 // No schema, usar: 
 // language: languageEnum("language").notNull(),
 // severity: severityEnum("severity").notNull(),
+// scoreCategory: scoreCategoryEnum("score_category").notNull(),
 ```
 
 #### `analysis_items`
@@ -234,7 +244,18 @@ ${code}`;
 
   const { score, review, items } = iaResponse;
 
-  // 3. Inserir no banco
+  // 3. Determinar a categoria do score baseado no valor
+  const getScoreCategory = (score: number): "terrible" | "poor" | "fair" | "good" | "excellent" => {
+    if (score <= 3.0) return "terrible";
+    if (score <= 5.0) return "poor";
+    if (score <= 7.0) return "fair";
+    if (score <= 8.5) return "good";
+    return "excellent";
+  };
+
+  const scoreCategory = getScoreCategory(score);
+
+  // 4. Inserir no banco
   // Limpar códigos antigos antes de inserir
   await cleanupOldSnippets();
 
@@ -243,6 +264,7 @@ ${code}`;
     code,
     language,
     score,
+    scoreCategory,
     roastMode,
     roastText: review,
   }).returning();
@@ -347,7 +369,7 @@ npm run drizzle:push
 
 ### Fase 2: Schema do Banco
 - [ ] Criar estrutura de pastas `src/db/`
-- [ ] Definir enums (language, severity) em `src/db/schema/enums.ts`
+- [ ] Definir enums (language, severity, scoreCategory) em `src/db/schema/enums.ts`
 - [ ] Definir schemas das tabelas (code_snippets, analysis_items)
 - [ ] Criar instância do Drizzle em `src/server/db.ts`
 - [ ] Gerar e aplicar migrations iniciais
