@@ -42,9 +42,10 @@ Como o objetivo é armazenar apenas **códigos recentes**, é necessário implem
 - **Estratégia**: Remover códigos com mais de 30 dias ou manter apenas os top 1000 (limite de storage).
 - **Implementação**: Job agendado (cron) ou trigger no banco para deletar registros antigos.
 
-### 3.3. Enums (opcional)
+### 3.3. Enums
 
-Para garantir consistência nos tipos de linguagem:
+Para garantir consistência nos tipos de linguagem e severidade das análises:
+
 ```typescript
 // src/db/schema/enums.ts
 export const languageEnum = pgEnum("language", [
@@ -60,8 +61,33 @@ export const languageEnum = pgEnum("language", [
   "plaintext",
 ]);
 
-// No schema, usar: language: languageEnum("language").notNull(),
+export const severityEnum = pgEnum("severity", [
+  "critical",  // Vermelho - Problemas graves
+  "warning",   // Amarelo/Ambar - Avisos
+  "good",      // Verde - Pontos positivos
+]);
+
+// No schema, usar: 
+// language: languageEnum("language").notNull(),
+// severity: severityEnum("severity").notNull(),
 ```
+
+#### `analysis_items`
+Armazena os itens de análise detalhada (cartões de "Roast Results").
+```typescript
+// src/db/schema/analysis_items.ts
+export const analysisItems = pgTable("analysis_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  snippetId: uuid("snippet_id").notNull().references(() => codeSnippets.id),
+  severity: severityEnum("severity").notNull(),
+  title: varchar("title", { length: 255 }).notNull(), // Ex: "using var instead of const/let"
+  description: text("description").notNull(), // Ex: "var is function-scoped..."
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+```
+
+**Relacionamento:**
+- **code_snippets** 1:N **analysis_items**: Cada código pode ter múltiplos itens de análise (cards).
 
 ## 4. Arquitetura de Pastas Proposta
 
@@ -70,14 +96,14 @@ src/
 ├── db/
 │   ├── schema/
 │   │   ├── index.ts        # Exporta todas as tabelas
-│   │   ├── users.ts
+│   │   ├── enums.ts        # Definições de enums (language, severity)
 │   │   ├── code_snippets.ts
-│   │   └── roasts.ts
+│   │   └── analysis_items.ts
 │   ├── index.ts            # Conexão com o banco
 │   └── migrations/         # Arquivos de migration gerados
 ├── server/
 │   ├── actions/
-│   │   ├── code.ts         # Submissão de código
+│   │   ├── code.ts         # Submissão de código e geração de análise
 │   │   └── leaderboard.ts  # Consultas do leaderboard
 │   └── db.ts               # Instância do Drizzle
 └── app/
@@ -125,7 +151,7 @@ Usar Server Actions para operações de banco de dados.
 
 **Observação sobre Anonimato**: Não vinculamos a `userId`.
 
-**Observação sobre IA**: Usaremos `AI SDK` (Vercel) para gerar o roast. Isso requer a chave de API da OpenAI (ou similar).
+**Observação sobre IA**: Usaremos `AI SDK` (Vercel) para gerar o roast. A IA deve retornar um JSON estruturado com o score e os itens de análise (severity, title, description).
 
 ```typescript
 // src/server/actions/code.ts
@@ -133,50 +159,110 @@ Usar Server Actions para operações de banco de dados.
 
 import { db } from '@/server/db'
 import { codeSnippets } from '@/db/schema/code_snippets'
+import { analysisItems } from '@/db/schema/analysis_items'
 import { revalidatePath } from 'next/cache'
 import { generateText } from 'ai' // Vercel AI SDK
 import { openai } from '@ai-sdk/openai' // ou outro provider
+import { lt } from 'drizzle-orm'
+
+// Interface para a resposta da IA
+interface AnalysisItem {
+  severity: "critical" | "warning" | "good";
+  title: string;
+  description: string;
+}
+
+interface IAResponse {
+  score: number;
+  review: string;
+  items: AnalysisItem[];
+}
 
 export async function submitCode(formData: FormData) {
   const code = formData.get('code') as string
   const language = formData.get('language') as string
   const roastMode = formData.get('roastMode') === 'true'
 
-  // 1. Gerar roast via IA
+  // 1. Gerar roast via IA com formato JSON
   const prompt = roastMode 
-    ? `You are a brutally honest code reviewer. Review this ${language} code and be sarcastic and direct:\n\n${code}`
-    : `You are a helpful code reviewer. Review this ${language} code and provide constructive feedback:\n\n${code}`;
+    ? `You are a brutally honest code reviewer. Review this ${language} code and be sarcastic and direct.
+Return your response in JSON format with the following structure:
+{
+  "score": number (0-10),
+  "review": string (overall review),
+  "items": [
+    { "severity": "critical"|"warning"|"good", "title": string, "description": string }
+  ]
+}
 
-  const { text: roastText } = await generateText({
+Code to review:
+${code}`
+    : `You are a helpful code reviewer. Review this ${language} code and provide constructive feedback.
+Return your response in JSON format with the following structure:
+{
+  "score": number (0-10),
+  "review": string (overall review),
+  "items": [
+    { "severity": "critical"|"warning"|"good", "title": string, "description": string }
+  ]
+}
+
+Code to review:
+${code}`;
+
+  const { text: responseText } = await generateText({
     model: openai('gpt-4o-mini'),
     prompt: prompt,
   });
 
-  // 2. Extrair score (ex: pedir à IA para retornar em formato JSON ou usar regex)
-  // Por simplicidade, vamos assumir que a IA retorna "Score: X/10" no texto ou calculamos hash.
-  // Para esta spec, vamos simular um score baseado no comprimento ou usar uma lógica simples.
-  // Idealmente, pedir à IA para retornar JSON: { "score": 5.5, "review": "..." }
-  
-  // Exemplo simples de parsing de score (assumindo formato "Score: 7.5")
-  const scoreMatch = roastText.match(/Score:\s*([\d.]+)/);
-  const score = scoreMatch ? parseFloat(scoreMatch[1]) : (Math.random() * 5 + 3); // Fallback
+  // 2. Parsear a resposta JSON
+  let iaResponse: IAResponse;
+  try {
+    // Encontrar o JSON no texto (remove markdown code blocks se presentes)
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON found in response");
+    iaResponse = JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error("Error parsing AI response:", error);
+    // Fallback básico se o JSON falhar
+    iaResponse = {
+      score: Math.random() * 5 + 3,
+      review: "Análise gerada (fallback)",
+      items: []
+    };
+  }
 
-  // 3. Inserir no banco (apenas se for um código novo/recente)
-  // Limpar códigos antigos antes de inserir (ou manter apenas top N)
-  await cleanupOldSnippets(); // Função de limpeza
+  const { score, review, items } = iaResponse;
 
-  await db.insert(codeSnippets).values({
+  // 3. Inserir no banco
+  // Limpar códigos antigos antes de inserir
+  await cleanupOldSnippets();
+
+  // Inserir o snippet principal
+  const [snippet] = await db.insert(codeSnippets).values({
     code,
     language,
     score,
     roastMode,
-    roastText,
-  })
+    roastText: review,
+  }).returning();
+
+  // Inserir os itens de análise (se houver)
+  if (items && items.length > 0) {
+    await db.insert(analysisItems).values(
+      items.map(item => ({
+        snippetId: snippet.id,
+        severity: item.severity,
+        title: item.title,
+        description: item.description,
+      }))
+    );
+  }
 
   revalidatePath('/')
   revalidatePath('/leaderboard')
   
-  return { success: true, score, roastText };
+  return { success: true, score, review, items, snippetId: snippet.id };
 }
 
 // Função para limpar códigos antigos (retenção apenas recentes)
@@ -261,15 +347,17 @@ npm run drizzle:push
 
 ### Fase 2: Schema do Banco
 - [ ] Criar estrutura de pastas `src/db/`
-- [ ] Definir schemas das tabelas (code_snippets apenas, usuarios anonimos)
+- [ ] Definir enums (language, severity) em `src/db/schema/enums.ts`
+- [ ] Definir schemas das tabelas (code_snippets, analysis_items)
 - [ ] Criar instância do Drizzle em `src/server/db.ts`
 - [ ] Gerar e aplicar migrations iniciais
 
 ### Fase 3: Server Actions (AI & DB)
-- [ ] Implementar `submitCode` com integração AI SDK
+- [ ] Implementar `submitCode` com integração AI SDK (retornando JSON com items de análise)
 - [ ] Implementar `cleanupOldSnippets` para retenção apenas de recentes
 - [ ] Implementar `getLeaderboard` (consulta do ranking)
 - [ ] Implementar `getStats` (estatísticas da homepage)
+- [ ] Implementar `getAnalysisItems` (para exibir os cards na tela de resultados)
 
 ### Fase 4: Integração com Frontend
 - [ ] Atualizar Homepage (`/`) para usar dados reais via Server Actions
