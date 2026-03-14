@@ -113,10 +113,9 @@ Criar um utilitário `detectLanguage(code: string): string` que:
 - [ ] **Integração na Homepage:** Substituir o input atual pelo novo `CodeEditor`.
 - [ ] **Testes:** Verificar performance com grandes blocos de código.
 
-## 7. Perguntas para o Usuário
+## 7. Respostas do Usuário
 
-1.  **Editor Read-only ou Editável?** O usuário deve conseguir editar o código colado no mesmo editor, ou apenas visualizar com opção de mudar linguagem?
-    *   *Contexto:* O ray-so permite edição.
-2.  **Detecção Automática de Linguagem:** Qual o nível de precisão esperado? (Ex: apenas por extensão de arquivo, ou análise de conteúdo?)
-3.  **Temas:** Precisa de suporte a temas claros/escuros personalizáveis, ou apenas o tema escuro padrão (como ray-so)?
-4.  **Linguagens Suportadas:** Há alguma linguagem específica que deve ser priorizada?
+1.  **Editor Editável:** Sim, o usuário pode editar o código mesmo depois de colado (modo visualização + edição).
+2.  **Detecção de Linguagem:** Por análise de conteúdo (heurística/baseada em keywords).
+3.  **Temas:** Suporte para temas claros e escuros.
+4.  **Linguagens:** Não existe uma específica, pode detectar qualquer linguagem suportada pelo Shiki.

@@ -2,10 +2,16 @@
 
 import { Button } from "@/components/ui";
 import { Toggle } from "@/components/ui/toggle";
+import { CodeEditor } from "@/components/ui/code-editor";
 import { useState } from "react";
 
 export default function Home() {
   const [roastMode, setRoastMode] = useState(true);
+  const [code, setCode] = useState(`function calculateTotal(items) {
+  return items.reduce((total, item) => {
+    return total + item.price * item.quantity;
+  }, 0);
+}`);
 
   return (
     <div className="min-h-screen bg-background">
@@ -24,22 +30,10 @@ export default function Home() {
 
           {/* Code Input Area */}
           <div className="bg-muted rounded-lg border border-border p-1 max-w-2xl mx-auto shadow-lg">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50 rounded-t">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-              </div>
-              <span className="text-xs text-muted-foreground">code.js</span>
-            </div>
-            <textarea
-              className="w-full h-64 bg-transparent p-4 text-foreground font-mono text-sm resize-none focus:outline-none"
-              placeholder="Paste your code here..."
-              defaultValue={`function calculateTotal(items) {
-  return items.reduce((total, item) => {
-    return total + item.price * item.quantity;
-  }, 0);
-}`}
+            <CodeEditor
+              defaultValue={code}
+              onChange={setCode}
+              theme="dark-plus"
             />
           </div>
 
