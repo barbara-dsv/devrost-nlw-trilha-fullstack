@@ -66,24 +66,30 @@ export function CodeEditor({
 }: CodeEditorProps) {
   const [code, setCode] = useState(defaultValue);
   const [detectedLanguage, setDetectedLanguage] = useState<Language>("plaintext");
+  const [userSelectedLanguage, setUserSelectedLanguage] = useState(false);
   const [highlightedCode, setHighlightedCode] = useState<string>("");
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
 
-  // Detect language on code change
+  // Set initial language from prop if user hasn't selected
   useEffect(() => {
-    if (!propLanguage) {
+    if (propLanguage && !userSelectedLanguage) {
+      setDetectedLanguage(propLanguage as Language);
+    }
+  }, [propLanguage, userSelectedLanguage]);
+
+  // Detect language on code change (only if user hasn't manually selected)
+  useEffect(() => {
+    if (code.length > 10 && !userSelectedLanguage) {
       const lang = detectLanguage(code);
       setDetectedLanguage(lang);
       if (onLanguageChange) {
         onLanguageChange(lang);
       }
-    } else {
-      setDetectedLanguage(propLanguage as Language);
     }
-  }, [code, propLanguage, onLanguageChange]);
+  }, [code, userSelectedLanguage, onLanguageChange]);
 
   // Highlight code using Shiki
   useEffect(() => {
@@ -117,6 +123,7 @@ export function CodeEditor({
 
   const handleLanguageSelect = (lang: Language) => {
     setDetectedLanguage(lang);
+    setUserSelectedLanguage(true);
     if (onLanguageChange) {
       onLanguageChange(lang);
     }
