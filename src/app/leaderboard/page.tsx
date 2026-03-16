@@ -1,5 +1,6 @@
 import { getLeaderboard, getStats } from "@/server/actions/leaderboard";
 import { Metadata } from "next";
+import { CodeBlockWithHighlight } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Leaderboard | DevRoast",
@@ -38,8 +39,8 @@ export default async function Leaderboard() {
         <div className="border border-border rounded-lg overflow-hidden">
           {/* Header */}
           <div className="flex items-center h-12 px-5 bg-muted/50 border-b border-border">
-            <span className="w-12 text-xs font-medium text-muted-foreground">
-              #
+            <span className="w-16 text-xs font-medium text-muted-foreground">
+              Rank
             </span>
             <span className="w-16 text-xs font-medium text-muted-foreground">
               Score
@@ -53,26 +54,24 @@ export default async function Leaderboard() {
           </div>
 
           {/* Rows */}
-          {leaderboardData.map((item) => (
+          {leaderboardData.map((item, index) => (
             <div
               key={item.id}
               className="flex items-start h-auto px-5 py-4 border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors"
             >
-              <span className="w-12 text-muted-foreground font-mono pt-1">
-                {item.scoreCategory}
+              <span className="w-16 text-muted-foreground font-mono pt-1">
+                {index + 1}
               </span>
               <span className="w-16 text-sm font-mono text-accent-red font-bold pt-1">
                 {Number(item.score).toFixed(1)}
               </span>
-              <div className="flex-1 mx-4 flex flex-col gap-1">
-                {item.code.split("\n").slice(0, 3).map((line, index) => (
-                  <code
-                    key={item.id + "-" + index}
-                    className="text-sm font-mono text-foreground"
-                  >
-                    {line}
-                  </code>
-                ))}
+              <div className="flex-1 mx-4 min-w-0">
+                <CodeBlockWithHighlight
+                  code={item.code.split("\n").slice(0, 3).join("\n")}
+                  language={item.language}
+                  maxLines={3}
+                  showLineNumbers={false}
+                />
               </div>
               <span className="w-24 text-xs text-muted-foreground font-mono pt-1">
                 {item.language}
