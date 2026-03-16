@@ -189,7 +189,7 @@ export default function Home() {
             </div>
             <a
               href="/leaderboard"
-              className="text-secondary text-sm font-mono px-3 py-1.5 border border-border hover:bg-muted transition-colors"
+              className="text-foreground text-sm font-mono px-3 py-1.5 border border-border bg-muted hover:bg-muted/80 transition-colors"
             >
               $ view_all {">>"}
             </a>
