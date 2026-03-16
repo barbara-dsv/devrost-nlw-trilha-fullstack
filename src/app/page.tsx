@@ -6,8 +6,10 @@ import { CodeEditor } from "@/components/ui/code-editor";
 import { submitCode } from "@/server/actions/code";
 import { ChevronDown } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
   const [roastMode, setRoastMode] = useState(true);
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("javascript");
@@ -67,11 +69,8 @@ export default function Home() {
       formData.append("roastMode", roastMode.toString());
 
       const result = await submitCode(formData);
-      if (result.success) {
-        // Optionally show a toast or just refetch
-        await fetchStats();
-        await fetchLeaderboard();
-        // Reset the form? We'll keep the code for now.
+      if (result.success && result.snippetId) {
+        router.push(`/result/${result.snippetId}`);
       } else {
         throw new Error("Submission failed");
       }
