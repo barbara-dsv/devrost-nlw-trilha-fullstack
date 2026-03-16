@@ -7,7 +7,7 @@ import { languageEnum, severityEnum } from "@/db/schema/enums";
 import { revalidatePath } from "next/cache";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
-import { lt } from "drizzle-orm";
+import { lt, inArray } from "drizzle-orm";
 
 console.log("OPENAI_API_KEY loaded:", process.env.OPENAI_API_KEY ? "YES (length: " + process.env.OPENAI_API_KEY.length + ")" : "NO");
 
@@ -159,5 +159,16 @@ interface IAResponse {
 
 async function cleanupOldSnippets() {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  await db.delete(codeSnippets).where(lt(codeSnippets.createdAt, thirtyDaysAgo));
+  
+  const oldSnippets = await db.select({ id: codeSnippets.id })
+    .from(codeSnippets)
+    .where(lt(codeSnippets.createdAt, thirtyDaysAgo));
+  
+  if (oldSnippets.length > 0) {
+    const oldIds = oldSnippets.map(s => s.id);
+    await db.delete(analysisItems).where(
+      inArray(analysisItems.snippetId, oldIds)
+    );
+    await db.delete(codeSnippets).where(lt(codeSnippets.createdAt, thirtyDaysAgo));
+  }
 }
