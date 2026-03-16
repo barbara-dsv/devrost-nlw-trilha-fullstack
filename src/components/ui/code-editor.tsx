@@ -67,6 +67,7 @@ export function CodeEditor({
   const [code, setCode] = useState(defaultValue);
   const [detectedLanguage, setDetectedLanguage] = useState<Language>("plaintext");
   const [highlightedCode, setHighlightedCode] = useState<string>("");
+  const [isHighlighting, setIsHighlighting] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
@@ -86,6 +87,7 @@ export function CodeEditor({
 
   // Highlight code using Shiki
   useEffect(() => {
+    setIsHighlighting(true);
     const highlightCode = async () => {
       try {
         const { codeToHtml } = await import("shiki");
@@ -99,6 +101,8 @@ export function CodeEditor({
         setHighlightedCode(
           `<pre class="shiki ${theme}"><code>${escapeHtml(code)}</code></pre>`
         );
+      } finally {
+        setIsHighlighting(false);
       }
     };
 
@@ -165,7 +169,17 @@ export function CodeEditor({
 
       {/* Editor Area */}
       <div className="relative h-64">
-        {/* Highlighted Code Layer */}
+      {/* Highlighted Code Layer */}
+      {isHighlighting ? (
+        <pre
+          ref={preRef}
+          className={codeVariants({
+            className:
+              "absolute inset-0 p-4 m-0 pointer-events-none overflow-auto bg-transparent",
+          })}
+          dangerouslySetInnerHTML={{ __html: escapeHtml(code) }}
+        />
+      ) : (
         <pre
           ref={preRef}
           className={codeVariants({
@@ -174,6 +188,7 @@ export function CodeEditor({
           })}
           dangerouslySetInnerHTML={{ __html: highlightedCode }}
         />
+      )}
 
         {/* Textarea Layer */}
         <textarea

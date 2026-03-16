@@ -3,15 +3,84 @@
 import { Button } from "@/components/ui";
 import { Toggle } from "@/components/ui/toggle";
 import { CodeEditor } from "@/components/ui/code-editor";
-import { useState } from "react";
+import { submitCode } from "@/server/actions/code";
+import { ChevronDown } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export default function Home() {
   const [roastMode, setRoastMode] = useState(true);
-  const [code, setCode] = useState(`function calculateTotal(items) {
-  return items.reduce((total, item) => {
-    return total + item.price * item.quantity;
-  }, 0);
-}`);
+  const [code, setCode] = useState("");
+  const [language, setLanguage] = useState("javascript");
+  const [stats, setStats] = useState({ totalCodes: 0, avgScore: 0 });
+  interface LeaderboardItem {
+    id: string;
+    code: string;
+    language: string;
+    score: number;
+    scoreCategory: string;
+    roastText: string;
+    createdAt: Date;
+    analysisItems: number;
+  }
+
+  const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchStats();
+    fetchLeaderboard();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch("/api/stats");
+      const data = await res.json();
+      setStats(data);
+    } catch (error) {
+      console.error("Failed to fetch stats:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLeaderboard = async () => {
+    try {
+      const res = await fetch("/api/leaderboard?limit=3");
+      const data = await res.json();
+      setLeaderboard(data);
+    } catch (error) {
+      console.error("Failed to fetch leaderboard:", error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("code", code);
+      formData.append("language", language);
+      formData.append("roastMode", roastMode.toString());
+
+      const result = await submitCode(formData);
+      if (result.success) {
+        // Optionally show a toast or just refetch
+        await fetchStats();
+        await fetchLeaderboard();
+        // Reset the form? We'll keep the code for now.
+      } else {
+        throw new Error("Submission failed");
+      }
+    } catch (err) {
+      console.error("Failed to submit code:", err);
+      setError("Failed to submit code. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -29,36 +98,79 @@ export default function Home() {
           </div>
 
           {/* Code Input Area */}
-          <div className="bg-muted rounded-lg border border-border p-1 max-w-2xl mx-auto shadow-lg">
+          <form onSubmit={handleSubmit} className="bg-muted rounded-lg border border-border p-1 max-w-2xl mx-auto shadow-lg">
+            <div className="mb-4">
+              <label htmlFor="language" className="mb-2 block text-sm font-medium text-muted-foreground">
+                Language
+              </label>
+              <div className="relative">
+                <select
+                  id="language"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="block w-full p-2 pl-10 border border-border rounded-md bg-background text-foreground appearance-none"
+                >
+                  <option value="javascript">JavaScript</option>
+                  <option value="typescript">TypeScript</option>
+                  <option value="python">Python</option>
+                  <option value="java">Java</option>
+                  <option value="csharp">C#</option>
+                  <option value="php">PHP</option>
+                  <option value="html">HTML</option>
+                  <option value="css">CSS</option>
+                  <option value="sql">SQL</option>
+                  <option value="plaintext">Plain Text</option>
+                </select>
+                <div className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none">
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
+            </div>
             <CodeEditor
               defaultValue={code}
               onChange={setCode}
+              language={language}
+              onLanguageChange={setLanguage}
               theme="dark-plus"
+              className="min-h-[200px]"
             />
-          </div>
-
-          {/* Actions Bar */}
-          <div className="flex items-center justify-between max-w-2xl mx-auto">
-            <div className="flex items-center gap-4">
-              <Toggle.Root checked={roastMode} onCheckedChange={setRoastMode}>
-                <Toggle.Switch />
-                <Toggle.Text>
-                  <Toggle.Label>roast mode</Toggle.Label>
-                  <Toggle.Description>maximum sarcasm enabled</Toggle.Description>
-                </Toggle.Text>
-              </Toggle.Root>
+            
+            {/* Actions Bar */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="flex items-center gap-4">
+                <Toggle.Root checked={roastMode} onCheckedChange={setRoastMode}>
+                  <Toggle.Switch />
+                  <Toggle.Text>
+                    <Toggle.Label>roast mode</Toggle.Label>
+                    <Toggle.Description>maximum sarcasm enabled</Toggle.Description>
+                  </Toggle.Text>
+                </Toggle.Root>
+              </div>
+              <Button.Lg
+                type="submit"
+                disabled={submitting}
+                className="{submitting ? 'opacity-50' : ''}"
+              >
+                {submitting ? "Submitting..." : "$ roast_my_code"}
+              </Button.Lg>
             </div>
-            <Button.Lg>
-              $ roast_my_code
-            </Button.Lg>
-          </div>
+          </form>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-600 max-w-2xl mx-auto">
+              {error}
+            </div>
+          )}
 
           {/* Stats */}
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-            <span>2,847 codes roasted</span>
-            <span>·</span>
-            <span>avg score: 4.2/10</span>
-          </div>
+          {!loading && (
+            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
+              <span>{stats.totalCodes.toLocaleString()} codes roasted</span>
+              <span>·</span>
+              <span>avg score: {(typeof stats.avgScore === 'number' ? stats.avgScore.toFixed(1) : 0)}/10</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -106,43 +218,35 @@ export default function Home() {
             </div>
 
             {/* Rows */}
-            {[
-              { rank: 1, code: "const x = y + z;", score: "2.1", lang: "js" },
-              {
-                rank: 2,
-                code: "if (true) { return false; }",
-                score: "3.4",
-                lang: "js",
-              },
-              {
-                rank: 3,
-                code: "function foo() { return foo(); }",
-                score: "4.2",
-                lang: "js",
-              },
-            ].map((item) => (
-              <div
-                key={item.rank}
-                className="flex items-center h-16 px-5 border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors"
-              >
-                <span className="w-12 text-muted-foreground">{item.rank}</span>
-                <code className="flex-1 text-sm font-mono text-foreground truncate mx-4">
-                  {item.code}
-                </code>
-                <span className="w-16 text-sm font-mono text-foreground">
-                  {item.score}
-                </span>
-                <span className="w-16 text-xs text-muted-foreground font-mono">
-                  {item.lang}
-                </span>
+            {!loading && leaderboard.length > 0 ? (
+              leaderboard.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="flex items-center h-16 px-5 border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors"
+                >
+                  <span className="w-12 text-muted-foreground">{index + 1}</span>
+                  <code className="flex-1 text-sm font-mono text-foreground truncate mx-4">
+                    {String(item.code).length > 50 ? String(item.code).substring(0, 50) + "..." : String(item.code)}
+                  </code>
+                  <span className="w-16 text-sm font-mono text-foreground">
+                    {String(item.score)}
+                  </span>
+                  <span className="w-16 text-xs text-muted-foreground font-mono">
+                    {String(item.language)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center h-16 px-5 text-muted-foreground">
+                No codes submitted yet. Be the first!
               </div>
-            ))}
+            )}
           </div>
 
           {/* Footer Hint */}
           <div className="flex items-center justify-center mt-4 py-2">
             <span className="text-xs text-muted-foreground font-mono">
-              showing top 3 of 2,847 ·{" "}
+              showing top {leaderboard.length} of {stats.totalCodes.toLocaleString()} ·{" "}
               <a href="/leaderboard" className="hover:underline">
                 view full leaderboard {">>"}
               </a>

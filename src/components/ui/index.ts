@@ -5,3 +5,4 @@ export { Navbar } from "./navbar";
 export { Toggle } from "./toggle";
 export { CodeBlock } from "./code-block";
 export { ScoreRing } from "./score-ring";
+export { CodeEditor } from "./code-editor";
