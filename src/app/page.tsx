@@ -132,7 +132,6 @@ export default function Home() {
               language={language}
               onLanguageChange={setLanguage}
               theme="dark-plus"
-              className="min-h-[200px]"
             />
             
             {/* Actions Bar */}

@@ -212,7 +212,7 @@ export function CodeEditor({
         </div>
       </div>
 
-      <div className="relative h-64">
+      <div className="relative min-h-64 max-h-96 overflow-auto">
         <pre
           ref={preRef}
           className={codeVariants({
