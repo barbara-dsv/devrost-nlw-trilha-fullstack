@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { detectLanguage } from "@/lib/language-detection";
 import { tv } from "tailwind-variants";
 
-// Tipos
 type Language =
   | "javascript"
   | "typescript"
@@ -33,7 +32,6 @@ interface CodeEditorProps {
   className?: string;
 }
 
-// Estilos
 const editorVariants = tv({
   base: "rounded-lg border border-border bg-muted overflow-hidden relative",
 });
@@ -42,7 +40,6 @@ const codeVariants = tv({
   base: "font-mono text-sm whitespace-pre-wrap break-words",
 });
 
-// Lista de linguagens suportadas para o seletor
 const supportedLanguages: { value: Language; label: string }[] = [
   { value: "javascript", label: "JavaScript" },
   { value: "typescript", label: "TypeScript" },
@@ -55,6 +52,23 @@ const supportedLanguages: { value: Language; label: string }[] = [
   { value: "markdown", label: "Markdown" },
   { value: "plaintext", label: "Plain Text" },
 ];
+
+// Preload Shiki
+let shikiModule: typeof import("shiki") | null = null;
+let shikiLoading = false;
+
+async function loadShiki() {
+  if (shikiModule) return shikiModule;
+  if (shikiLoading) {
+    while (!shikiModule) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return shikiModule;
+  }
+  shikiLoading = true;
+  shikiModule = await import("shiki");
+  return shikiModule;
+}
 
 export function CodeEditor({
   defaultValue = "",
@@ -70,17 +84,25 @@ export function CodeEditor({
   const [highlightedCode, setHighlightedCode] = useState<string>("");
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [shikiReady, setShikiReady] = useState(false);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Set initial language from prop if user hasn't selected
+  // Preload Shiki on mount
+  useEffect(() => {
+    loadShiki().then(() => setShikiReady(true));
+  }, []);
+
+  // Set initial language from prop
   useEffect(() => {
     if (propLanguage && !userSelectedLanguage) {
       setDetectedLanguage(propLanguage as Language);
     }
   }, [propLanguage, userSelectedLanguage]);
 
-  // Detect language on code change (only if user hasn't manually selected)
+  // Detect language on code change
   useEffect(() => {
     if (code.length > 10 && !userSelectedLanguage) {
       const lang = detectLanguage(code);
@@ -91,29 +113,44 @@ export function CodeEditor({
     }
   }, [code, userSelectedLanguage, onLanguageChange]);
 
-  // Highlight code using Shiki
-  useEffect(() => {
+  // Highlight code with debounce
+  const highlightCode = useCallback(async () => {
+    if (!code || !shikiReady) {
+      setHighlightedCode("");
+      return;
+    }
+
     setIsHighlighting(true);
-    const highlightCode = async () => {
-      try {
-        const { codeToHtml } = await import("shiki");
-        const html = await codeToHtml(code, {
-          lang: detectedLanguage,
-          theme: theme,
-        });
-        setHighlightedCode(html);
-      } catch (error) {
-        console.error("Error highlighting code:", error);
-        setHighlightedCode(
-          `<pre class="shiki ${theme}"><code>${escapeHtml(code)}</code></pre>`
-        );
-      } finally {
-        setIsHighlighting(false);
+    try {
+      const { codeToHtml } = await loadShiki();
+      const html = await codeToHtml(code, {
+        lang: detectedLanguage,
+        theme: theme,
+      });
+      setHighlightedCode(html);
+    } catch (error) {
+      console.error("Error highlighting code:", error);
+      setHighlightedCode(`<pre class="shiki ${theme}"><code>${escapeHtml(code)}</code></pre>`);
+    } finally {
+      setIsHighlighting(false);
+    }
+  }, [code, detectedLanguage, theme, shikiReady]);
+
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    
+    debounceRef.current = setTimeout(() => {
+      highlightCode();
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
       }
     };
-
-    highlightCode();
-  }, [code, detectedLanguage, theme]);
+  }, [highlightCode]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
@@ -130,7 +167,6 @@ export function CodeEditor({
     setShowLanguageDropdown(false);
   };
 
-  // Sync scroll between textarea and highlighted code
   const handleScroll = () => {
     if (textareaRef.current && preRef.current) {
       preRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -142,9 +178,11 @@ export function CodeEditor({
     supportedLanguages.find((l) => l.value === detectedLanguage)?.label ||
     detectedLanguage;
 
+  // Show plain text while loading Shiki or during highlight
+  const showPlainText = !shikiReady || (isHighlighting && !highlightedCode);
+
   return (
     <div className={editorVariants({ className })}>
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-red-500" />
@@ -174,30 +212,18 @@ export function CodeEditor({
         </div>
       </div>
 
-      {/* Editor Area */}
       <div className="relative h-64">
-      {/* Highlighted Code Layer */}
-      {isHighlighting ? (
         <pre
           ref={preRef}
           className={codeVariants({
             className:
               "absolute inset-0 p-4 m-0 pointer-events-none overflow-auto bg-transparent",
           })}
-          dangerouslySetInnerHTML={{ __html: escapeHtml(code) }}
+          dangerouslySetInnerHTML={{
+            __html: highlightedCode || escapeHtml(code),
+          }}
         />
-      ) : (
-        <pre
-          ref={preRef}
-          className={codeVariants({
-            className:
-              "absolute inset-0 p-4 m-0 pointer-events-none overflow-auto bg-transparent",
-          })}
-          dangerouslySetInnerHTML={{ __html: highlightedCode }}
-        />
-      )}
 
-        {/* Textarea Layer */}
         <textarea
           ref={textareaRef}
           value={code}
@@ -209,7 +235,6 @@ export function CodeEditor({
               "absolute inset-0 w-full h-full p-4 bg-transparent text-transparent caret-foreground resize-none focus:outline-none z-10",
           })}
           style={{
-            // Manter o caret visível e o texto invisível para não sobrepor o highlight
             color: "transparent",
             caretColor: "currentColor",
           }}
@@ -219,8 +244,15 @@ export function CodeEditor({
   );
 }
 
-// Helper para escapar HTML
 function escapeHtml(text: string): string {
+  if (typeof document === "undefined") {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
