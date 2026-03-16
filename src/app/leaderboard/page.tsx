@@ -1,65 +1,16 @@
-export default function Leaderboard() {
-  const leaderboardData = [
-    {
-      rank: 1,
-      code: [
-        'eval(prompt("enter code"))',
-        "document.write(response)",
-        "// trust the user lol",
-      ],
-      score: "1.2",
-      lang: "javascript",
-    },
-    {
-      rank: 2,
-      code: [
-        "if (x == true) { return true; }",
-        "else if (x == false) { return false; }",
-        "else { return !false; }",
-      ],
-      score: "1.8",
-      lang: "typescript",
-    },
-    {
-      rank: 3,
-      code: ["SELECT * FROM users WHERE 1=1", "-- TODO: add authentication"],
-      score: "2.1",
-      lang: "sql",
-    },
-    { rank: 4, code: ["const x = y + z;"], score: "2.5", lang: "javascript" },
-    {
-      rank: 5,
-      code: [
-        "function calculateTotal(items) {",
-        "  return items.reduce((total, item) => {",
-        "    return total + item.price * item.quantity;",
-        "  }, 0);",
-        "}",
-      ],
-      score: "3.0",
-      lang: "javascript",
-    },
-    {
-      rank: 6,
-      code: ["while (true) { break; }"],
-      score: "3.5",
-      lang: "javascript",
-    },
-    { rank: 7, code: ["let a; a = a + 1;"], score: "4.0", lang: "javascript" },
-    {
-      rank: 8,
-      code: ["console.log('Hello World')"],
-      score: "4.5",
-      lang: "javascript",
-    },
-    {
-      rank: 9,
-      code: ["document.write('test')"],
-      score: "5.0",
-      lang: "javascript",
-    },
-    { rank: 10, code: ["eval('alert(1)')"], score: "5.5", lang: "javascript" },
-  ];
+import { getLeaderboard, getStats } from "@/server/actions/leaderboard";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Leaderboard | DevRoast",
+  description: "The worst code on the internet, ranked by shame",
+};
+
+export default async function Leaderboard() {
+  const [leaderboardData, stats] = await Promise.all([
+    getLeaderboard(10),
+    getStats(),
+  ]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -104,20 +55,19 @@ export default function Leaderboard() {
           {/* Rows */}
           {leaderboardData.map((item) => (
             <div
-              key={item.rank}
+              key={item.id}
               className="flex items-start h-auto px-5 py-4 border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors"
             >
               <span className="w-12 text-muted-foreground font-mono pt-1">
-                {item.rank}
+                {item.scoreCategory}
               </span>
               <span className="w-16 text-sm font-mono text-accent-red font-bold pt-1">
-                {item.score}
+                {Number(item.score).toFixed(1)}
               </span>
               <div className="flex-1 mx-4 flex flex-col gap-1">
-                {item.code.map((line, index) => (
+                {item.code.split("\n").slice(0, 3).map((line, index) => (
                   <code
-                    // biome-ignore lint/suspicious/noArrayIndexKey: Code lines are static and unique per snippet
-                    key={item.rank + "-" + index}
+                    key={item.id + "-" + index}
                     className="text-sm font-mono text-foreground"
                   >
                     {line}
@@ -125,7 +75,7 @@ export default function Leaderboard() {
                 ))}
               </div>
               <span className="w-24 text-xs text-muted-foreground font-mono pt-1">
-                {item.lang}
+                {item.language}
               </span>
             </div>
           ))}
@@ -134,7 +84,7 @@ export default function Leaderboard() {
         {/* Pagination hint */}
         <div className="flex items-center justify-center mt-6 py-2">
           <span className="text-xs text-muted-foreground font-mono">
-            showing top 10 of 2,847 · end of list
+            showing top 10 of {stats.totalCodes.toLocaleString()} · end of list
           </span>
         </div>
       </div>

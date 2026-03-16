@@ -27,6 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isOverLimit, setIsOverLimit] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -131,6 +132,8 @@ export default function Home() {
               onChange={setCode}
               language={language}
               onLanguageChange={setLanguage}
+              onLimitChange={setIsOverLimit}
+              maxLength={2000}
               theme="dark-plus"
             />
             
@@ -147,10 +150,10 @@ export default function Home() {
               </div>
               <Button.Lg
                 type="submit"
-                disabled={submitting}
-                className="{submitting ? 'opacity-50' : ''}"
+                disabled={submitting || isOverLimit}
+                className={isOverLimit ? "opacity-50 cursor-not-allowed" : ""}
               >
-                {submitting ? "Submitting..." : "$ roast_my_code"}
+                {isOverLimit ? "Code too long" : submitting ? "Submitting..." : "$ roast_my_code"}
               </Button.Lg>
             </div>
           </form>

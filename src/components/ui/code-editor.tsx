@@ -27,6 +27,8 @@ interface CodeEditorProps {
   defaultValue?: string;
   onChange?: (code: string) => void;
   onLanguageChange?: (language: string) => void;
+  onLimitChange?: (isOverLimit: boolean) => void;
+  maxLength?: number;
   language?: string;
   theme?: Theme;
   className?: string;
@@ -74,6 +76,8 @@ export function CodeEditor({
   defaultValue = "",
   onChange,
   onLanguageChange,
+  onLimitChange,
+  maxLength = 2000,
   language: propLanguage,
   theme = "dark-plus",
   className,
@@ -154,9 +158,16 @@ export function CodeEditor({
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
+    if (newValue.length > maxLength) {
+      onLimitChange?.(true);
+      return;
+    }
+    onLimitChange?.(false);
     setCode(newValue);
     onChange?.(newValue);
   };
+
+  const isOverLimit = code.length > maxLength;
 
   const handleLanguageSelect = (lang: Language) => {
     setDetectedLanguage(lang);
@@ -239,6 +250,12 @@ export function CodeEditor({
             caretColor: "currentColor",
           }}
         />
+        
+        <div className={`absolute bottom-2 right-2 text-xs font-mono px-2 py-1 rounded ${
+          isOverLimit ? "bg-red-500/20 text-red-400" : "bg-muted/80 text-muted-foreground"
+        }`}>
+          {code.length} / {maxLength}
+        </div>
       </div>
     </div>
   );
